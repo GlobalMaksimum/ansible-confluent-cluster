@@ -1,0 +1,191 @@
+# TODO: This cookbook is now limited to Centos/Redhat 6 and requires to be modified for Centos7
+---
+- hosts: all
+  any_errors_fatal: true
+  vars:
+        create: true                                           # set to true if creating a new logical volume (do not set extend or resize to true)
+        config_lvm: true                                       # must be set to true in order to execute any tasks in play (failsafe option :)- )
+        kafka_user: kafka
+        kafka_group: kafka
+        jdk_version: 1.8.0
+        # resize: false                                           # set to true if resizing the logical volume (do not set create to true)
+        # extend: false                                           # set to true if extending the logical volume (do not set create to true)
+        # current_disk: '/dev/sda5'                               # set to your current disk device already setup in lvm
+        new_disk: '/dev/sdb'                                    # set to new disk being added to volume group
+        new_mntp: '/kafkafs'                              # set to the desired mount point to be created and new logical volume to be mounted to
+        create_lvname: 'kafka_lv'                               # set to logical volume name to create
+        create_vgname: 'kafka_vg'                               # set to volume group name to create
+        create_lvsize: '10G'                               # set to logical volume size to create --- (10G) - would create new lvm with 10Gigabytes -- (512) - would create new lvm with 512m
+        filesystem: 'ext4'                                      # set to filesystem type to format new logical volume with ( ext3, ext4, xfs, etc. )
+        confluent_version: '2.0.1'      # valid values are 2.0.1 and 3.1.1 for now
+        confluent_enterprise: false
+
+  tasks:
+    - name: creating new LVM volume group
+      lvg: vg={{ create_vgname }} pvs={{ new_disk }} state=present
+      when: create and config_lvm
+
+    - name: creating new LVM logical volume
+      lvol: vg={{ create_vgname }} lv={{ create_lvname }} size={{ create_lvsize }}
+      when: create and config_lvm
+
+    - name: creating new filesystem on new LVM logical volume
+      filesystem: fstype={{ filesystem }} dev=/dev/{{ create_vgname }}/{{ create_lvname }}
+      when: create and config_lvm
+
+    - name: mounting new filesystem
+      mount: name={{ new_mntp }} src=/dev/{{ create_vgname }}/{{ create_lvname }} fstype={{ filesystem }} state=mounted
+      when: create and config_lvm
+
+    - name: Create kafka group
+      group: name={{ kafka_group}} state=present
+
+    - name: Create kafka user
+      user: name={{ kafka_user}} comment="Kafka application user" group={{kafka_group}}
+
+    - name: Change owner of {{new_mntp}} to {{kafka_user}}:{{kafka_group}} recursively
+      file: path={{new_mntp}} recurse=true owner={{kafka_user}} group={{kafka_group}}
+
+    - name: Install JDK {{jdk_version}}
+      yum:
+          name: java-{{jdk_version}}-openjdk
+          state: present
+
+    - name: Install libselinux-python
+      yum:
+          name: libselinux-python
+          state: present
+
+    - name: Stop and disable iptables on node
+      service: name=iptables state=stopped enabled=no
+
+    - name: Disable SELinux
+      selinux: state=disabled
+
+    - name: Import Confluent Kafka repository key
+      rpm_key: key=http://packages.confluent.io/rpm/3.1/archive.key state=present
+      when: (confluent_version ==  "3.1.1")
+
+    - name: Import Confluent Kafka repository key
+      rpm_key: key=http://packages.confluent.io/rpm/2.0/archive.key state=present
+      when: (confluent_version == "2.0.1")
+
+    - name: Add Confluent.dist repository
+      yum_repository:
+          name: Confluent.dist
+          description: Confluent repository (dist)
+          file: confluent
+          baseurl: http://packages.confluent.io/rpm/3.1/6
+          gpgcheck: yes
+          gpgkey: http://packages.confluent.io/rpm/3.1/archive.key
+          state: present
+      when: (confluent_version == "3.1.1")
+
+    - name: Add Confluent repository
+      yum_repository:
+          name: Confluent
+          description: Confluent repository
+          file: confluent
+          baseurl: http://packages.confluent.io/rpm/3.1
+          gpgcheck: yes
+          gpgkey: http://packages.confluent.io/rpm/3.1/archive.key
+          state: present
+      when: (confluent_version == "3.1.1")
+
+    - name: Add Confluent Platform repository
+      yum_repository:
+          name: confluent-2.0
+          description: Confluent repository for 2.0.x packages
+          file: confluent
+          baseurl: http://packages.confluent.io/rpm/2.0
+          gpgcheck: yes
+          gpgkey: http://packages.confluent.io/rpm/2.0/archive.key
+          state: present
+      when: (confluent_version == "2.0.1")
+
+# Because the librdkafka RPM is currently not yet compatible with older
+# Linux distributions based on RHEL 6.x, you cannot use the confluent-platform-2.11.7
+# package to install the entire Confluent Platform in a single command as shown below.
+# Instead, please install the desired software packages such as confluent-kafka-2.11.7 or confluent-schema-registry individually.
+# If you want to install librdkafka, the current workaround is to install it from the zip and tar archives.
+    - name: Installing Confluent Platform
+      yum:
+          name: confluent-kafka-2.11.7
+          state: present
+      when: (confluent_version == "2.0.1")
+
+    - name: Installing Confluent Open Source
+      yum:
+          name:  confluent-platform-oss-2.11
+          state: present
+      when: (confluent_version ==  "3.1.1") and (not confluent_enterprise)
+
+    - name: Installing  Confluent Enterprise
+      yum:
+          name:  confluent-platform-2.11
+          state: present
+      when: (confluent_version ==  "3.1.1") and confluent_enterprise
+
+    - name: Change owner of /var/log/kafka to {{kafka_user}}:{{kafka_group}}
+      file: path="/var/log/kafka" recurse=true owner={{kafka_user}} group={{kafka_group}}
+
+    - name: Configure /etc/kafka/zookeeper.properties
+      template:
+          src=zookeeper.j2
+          dest=/etc/kafka/zookeeper.properties
+
+    - name: Create zookeeper directory.
+      file: dest={{new_mntp}}/zookeeper owner={{kafka_user}} group={{kafka_group}} state=directory
+
+    - name: Create zookeeper directory.
+      file: dest={{new_mntp}}/kafka owner={{kafka_user}} group={{kafka_group}} state=directory
+
+    - name: Create myid files
+      lineinfile: dest={{new_mntp}}/zookeeper/myid owner={{kafka_user}} group={{kafka_group}} line={{ broker_id + 1 }} create=yes
+
+    - name: Configure kafka log.dirs
+      ini_file:
+          dest: /etc/kafka/server.properties
+          section: null
+          option: log.dirs
+          value: "{{new_mntp}}/kafka"
+          backup: yes
+
+    - name: Configure kafka log.dirs
+      ini_file:
+          dest: /etc/kafka/server.properties
+          section: null
+          option: delete.topic.enable
+          value: true
+          backup: yes
+
+    - debug: msg="Broker ID is set to be {{ broker_id }}"
+
+    - name: Configure kafka broker.id
+      ini_file:
+          dest: /etc/kafka/server.properties
+          section: null
+          option: broker.id
+          value: "{{ broker_id }}"
+          backup: yes
+
+    - name: Configure kafka zookeeper.connect
+      ini_file:
+          dest: /etc/kafka/server.properties
+          section: null
+          option: zookeeper.connect
+          value: "{% for node in play_hosts %}{{ hostvars[node]['ansible_host']  }}:2181{% if not loop.last %},{% endif %}{% endfor %}"
+          backup: yes
+
+    - name: Configure kafka advertised.host.name
+      ini_file:
+          dest: /etc/kafka/server.properties
+          section: null
+          option: advertised.host.name
+          value: "{{ ansible_host }}"
+          backup: yes
+
+    # - name: Generate /etc/hosts file
+    #   template:
+    #       src=etc/hosts.j2
+    #       dest=/etc/hosts
