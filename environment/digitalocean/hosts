@@ -1,0 +1,4 @@
+[kafka]
+centos-2gb-fra1-01 broker_id=0 ansible_host=138.68.108.100
+centos-2gb-fra1-02 broker_id=1 ansible_host=138.68.106.52
+centos-2gb-fra1-03 broker_id=2 ansible_host=138.68.110.33
