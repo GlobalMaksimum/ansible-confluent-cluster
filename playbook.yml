@@ -8,9 +8,6 @@
         kafka_user: kafka
         kafka_group: kafka
         jdk_version: 1.8.0
-        # resize: false                                           # set to true if resizing the logical volume (do not set create to true)
-        # extend: false                                           # set to true if extending the logical volume (do not set create to true)
-        # current_disk: '/dev/sda5'                               # set to your current disk device already setup in lvm
         new_disk: '/dev/sdb'                                    # set to new disk being added to volume group
         new_mntp: '/kafkafs'                              # set to the desired mount point to be created and new logical volume to be mounted to
         create_lvname: 'kafka_lv'                               # set to logical volume name to create
@@ -185,7 +182,3 @@
           value: "{{ ansible_host }}"
           backup: yes
 
-    # - name: Generate /etc/hosts file
-    #   template:
-    #       src=etc/hosts.j2
-    #       dest=/etc/hosts
