@@ -1,13 +1,13 @@
-It is funny to see that majority of the available material on the web on Kafka installation is based on single instance Zookeeper & Kafka Broker based.
-Few Multi-broker guidelines is about installing brokers on the same host with different broker ports.
+It is funny to see that majority of the available material on the web on Kafka installation is based on single instance Zookeeper & Kafka Broker installation.
+Few Multi-broker guidelines are about installing brokers on the same host with different broker ports.
 
 ## What does this installation do ?
-* Given that you have 3+ nodes already configured and up (virtual or physical) this installer automatically configures HA Zookeeper and Kafka brokers on those servers.
+* Given that you have 3+ nodes already configured and up (virtual or physical) this installer automatically configures HA Zookeeper and Kafka brokers on servers.
 * Deployment is Ansible based
-* Installation is not Apache Kafka but confluent installation.
+* It is not Apache Kafka but Confluent distro.
 
 ## Installation
-For basic installation what you need to set is the `hosts` file (`-i` option) and given that your `hosts` file includes more than one group of hosts use `-l` option to further specify that group of servers.
+For basic installation what you need to do is to set `hosts` file (`-i` option) and provide `-l` option to further specify that group of servers, given that your `hosts` file includes more than one group of hosts.
 
 ```
 ansible-playbook -i environment/digitalocean/hosts -l kafka -u root playbook.yml
@@ -31,10 +31,10 @@ There a few variables in our configuration which you may want to change:
 | `confluent_version`          |  `'2.0.1'`       |   Confluent distro version. Currently `2.0.1` and `3.1.1` supported        |
 | `confluent_enterprise`          |  `false`       |   Whether to install Confluent Enterprise or Confluent Open Source        |
 
-`create` and `config_lvm` parameters are usually only relevant for large scale production deployments in which you will use a separate spindle for Kafka and Zookeeper. So you will need a dedicated mount point.
+`create` and `config_lvm` parameters are usually relevant for large scale production deployments in which you use a separate disk spindle for Kafka and Zookeeper. So you will need a dedicated mount point.
 
 ### Confluent Version vs. Kafka Version
-Confluent version and Kafka version are obviously two different things. If you have a restriction at Kafka version supported please note the following compatibility matrix:
+Confluent version and Kafka version are obviously two different things. If you have a restriction on Kafka version supported please note the following compatibility matrix:
 
 
 | Confluent Version | Kafka Version |
@@ -55,13 +55,13 @@ nohup zookeeper-server-start /etc/kafka/zookeeper.properties > zookeeper.log 2>&
 nohup kafka-server-start /etc/kafka/server.properties > kafka.log 2>&1 &
 ```
 ## Create a Sample Topic
-As an example, create a topic `topicn` with `3` partitions and replication factor of `3`.
+Create a topic (`topicn`) with `3` partitions (or more) and replication factor of `3`.
 
 ```
 kafka-topics --create --zookeeper 138.68.108.100:2181,138.68.106.52:2181,138.68.110.33:2181  --topic topicn --replication-factor 3 --partitions 3
 ```
 
-See that topic partitions are uniformly distributed across available broker nodes.
+See that topic partitions are uniformly distributed across available brokers.
 
 ```
 kafka-topics --describe --zookeeper 138.68.108.100:2181,138.68.106.52:2181,138.68.110.33:2181 --topic topicn
@@ -83,15 +83,15 @@ kafka-verifiable-producer --broker-list 138.68.108.100:9092,138.68.106.52:9092,1
 ```
 
 ## Consume Messages
-Available Kafka clients are usually high-level consumer clients which may not be suitable for some applications guarantee **exactly once** semantics by using a transactional behaviour at consumer site.
+It is trivial to come across high-level Kafka consumer clients on the web which may not be suitable for some applications guaranting **exactly once** semantics by using a transactional behaviour at consumer site. Such as, reletional databases.
 
-So we have bundled a simple Python simple consumer client to check everything works properly.
+So we have bundled a simple Python consumer script (based on `pykafka` module).
 
 Ensure that you properly changed following variables in file before you execute it
 
-* `_max_messages_to_consume` is the maximum number of messages you want to consume from the topic. Note that current implementation is a blocking consumer. If the number of messages available in topic is less `_max_messages_to_consume` than `consumer.consume()` call wil be blocked till you interrupt the client or more messages are available in the topic.
+* `_max_messages_to_consume` is the maximum number of messages you want to consume from the topic. Note that current implementation is a blocking consumer. If the number of messages available in topic is less than `_max_messages_to_consume`, `consumer.consume()` call wil be blocked till you interrupt the client or more messages are available in the topic.
 * `_bootstrap_servers` is a comma separated list of Kafka broker `host:port` pairs
-* `_topic` is the name of the topic consume from.
+* `_topic` is the name of the topic.
 
 
 ```
@@ -117,9 +117,9 @@ Msg b'27', Partition: 9, Offset: 1
 ```
 
 ## Performance
-This is obviously not a detailed kafka performance test and given with a purpose to have a baseline in mind.
+This is obviously not a detailed kafka performance test and figures are given only to provide a baseline.
 
-Performance values obtained on 3 node `2GB` digitalocean cluster with `CentOS 6.8`
+Performance values obtained on a 3 node `2GB` digitalocean cluster (`CentOS 6.8`)
 
 
 ### Producer Performance
